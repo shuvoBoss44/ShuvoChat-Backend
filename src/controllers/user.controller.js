@@ -51,7 +51,7 @@ class userController {
             res.cookie('token', token, {
                 httpOnly: true,
                 secure: process.env.NODE_ENV === 'production',
-                sameSite: 'strict',
+                sameSite: 'none',
                 maxAge: 15 * 24 * 60 * 60 * 1000 // 15 days
             });
             // upsert user data to stream
@@ -104,7 +104,7 @@ class userController {
             res.cookie("token", token, {
                 httpOnly: true,
                 secure: process.env.NODE_ENV === "production",
-                sameSite: "strict",
+                sameSite: "none",
                 maxAge: 15 * 24 * 60 * 60 * 1000, // 15 days
             });
 
