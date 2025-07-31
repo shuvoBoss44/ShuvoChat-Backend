@@ -446,6 +446,34 @@ class userController {
             return next(new CustomError(500, 'Internal Server Error'));
         }
     }
+    static getOutgoingFriendRequests = async (req, res, next) => {
+        try {
+            // Find outgoing requests
+            const outgoingRequests = await FriendRequest.find({ sender: req.user._id, status: 'pending' })
+                .populate('recipient', 'fullName profilePicture')
+                .select('-__v');
+
+            // Validate and clean up invalid requests
+            const validRequests = [];
+            for (const request of outgoingRequests) {
+                if (!request.recipient || !mongoose.Types.ObjectId.isValid(request.recipient._id)) {
+                    // Remove invalid request
+                    await FriendRequest.findByIdAndDelete(request._id);
+                    console.warn(`Deleted invalid friend request with ID: ${request._id}`);
+                    continue;
+                }
+                validRequests.push(request);
+            }
+
+            res.status(200).json({
+                message: 'Outgoing friend requests retrieved successfully',
+                outgoingRequests: validRequests,
+            });
+        } catch (error) {
+            console.error('Error fetching outgoing friend requests:', error);
+            return next(new CustomError(500, 'Internal Server Error'));
+        }
+    }
 }
 
 module.exports = userController;
