@@ -12,7 +12,6 @@ cloudinary.config({
 });
 
 class postController {
-    // Create a post
     static async createPost(req, res, next) {
         try {
             const { content } = req.body;
@@ -25,9 +24,12 @@ class postController {
             if (req.file) {
                 const result = await new Promise((resolve, reject) => {
                     const stream = cloudinary.uploader.upload_stream(
-                        { resource_type: 'image', folder: 'shuvochat_posts' },
+                        { resource_type: 'image', folder: 'shuvomedia_posts' },
                         (error, result) => {
-                            if (error) reject(new CustomError(500, 'Failed to upload image to Cloudinary'));
+                            if (error) {
+                                console.error('Cloudinary upload error:', error);
+                                reject(new CustomError(500, 'Failed to upload image to Cloudinary'));
+                            }
                             resolve(result);
                         }
                     );
@@ -55,7 +57,6 @@ class postController {
         }
     }
 
-    // Get friends' posts
     static async getFriendsPosts(req, res, next) {
         try {
             const user = await User.findById(req.user._id).select('friends');
@@ -65,6 +66,10 @@ class postController {
 
             const posts = await Post.find({ user: { $in: [...user.friends, req.user._id] } })
                 .populate('user', 'fullName profilePicture')
+                .populate({
+                    path: 'likes',
+                    populate: { path: 'user', select: 'fullName profilePicture' },
+                })
                 .sort({ createdAt: -1 })
                 .select('-__v');
 
@@ -75,7 +80,6 @@ class postController {
         }
     }
 
-    // Get user's posts
     static async getUserPosts(req, res, next) {
         try {
             const userId = req.params.userId;
@@ -86,6 +90,10 @@ class postController {
 
             const posts = await Post.find({ user: userId })
                 .populate('user', 'fullName profilePicture')
+                .populate({
+                    path: 'likes',
+                    populate: { path: 'user', select: 'fullName profilePicture' },
+                })
                 .sort({ createdAt: -1 })
                 .select('-__v');
 
@@ -96,7 +104,6 @@ class postController {
         }
     }
 
-    // Like a post
     static async likePost(req, res, next) {
         try {
             const { postId } = req.params;
@@ -125,7 +132,6 @@ class postController {
         }
     }
 
-    // Unlike a post
     static async unlikePost(req, res, next) {
         try {
             const { postId } = req.params;
@@ -142,7 +148,6 @@ class postController {
         }
     }
 
-    // Comment on a post
     static async commentOnPost(req, res, next) {
         try {
             const { postId } = req.params;
@@ -176,7 +181,6 @@ class postController {
         }
     }
 
-    // Get comments for a post
     static async getPostComments(req, res, next) {
         try {
             const { postId } = req.params;
@@ -194,6 +198,38 @@ class postController {
             res.status(200).json({ message: 'Comments retrieved successfully', comments });
         } catch (error) {
             console.error('Error fetching comments:', error);
+            return next(new CustomError(500, 'Internal Server Error'));
+        }
+    }
+
+    static async deletePost(req, res, next) {
+        try {
+            const { postId } = req.params;
+
+            const post = await Post.findById(postId);
+            if (!post) {
+                return next(new CustomError(404, 'Post not found'));
+            }
+
+            if (post.user.toString() !== req.user._id.toString()) {
+                return next(new CustomError(403, 'You are not authorized to delete this post'));
+            }
+
+            // Delete associated likes and comments
+            await Like.deleteMany({ post: postId });
+            await Comment.deleteMany({ post: postId });
+
+            // Delete image from Cloudinary if it exists
+            if (post.image) {
+                const publicId = post.image.split('/').pop().split('.')[0];
+                await cloudinary.uploader.destroy(`shuvomedia_posts/${publicId}`);
+            }
+
+            await Post.findByIdAndDelete(postId);
+
+            res.status(200).json({ message: 'Post deleted successfully' });
+        } catch (error) {
+            console.error('Error deleting post:', error);
             return next(new CustomError(500, 'Internal Server Error'));
         }
     }

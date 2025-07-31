@@ -20,9 +20,10 @@ const upload = multer({
 
 router.post('/create', authentication, upload.single('image'), postController.createPost);
 router.get('/friends', authentication, postController.getFriendsPosts);
+router.get('/comments/:postId', authentication, postController.getPostComments);
 router.post('/like/:postId', authentication, postController.likePost);
 router.delete('/unlike/:postId', authentication, postController.unlikePost);
 router.post('/comment/:postId', authentication, postController.commentOnPost);
-router.get('/comments/:postId', authentication, postController.getPostComments);
+router.delete('/:postId', authentication, postController.deletePost);
 
 module.exports = router;

@@ -14,7 +14,6 @@ cloudinary.config({
 });
 
 class userController {
-    // Register user
     static register = async (req, res, next) => {
         try {
             const { fullName, email, password } = req.body;
@@ -65,7 +64,6 @@ class userController {
         }
     }
 
-    // Login
     static login = async (req, res, next) => {
         try {
             const { email, password } = req.body;
@@ -113,7 +111,6 @@ class userController {
         }
     }
 
-    // Logout
     static logout = async (req, res, next) => {
         try {
             res.clearCookie('token');
@@ -124,7 +121,6 @@ class userController {
         }
     }
 
-    // Update user profile
     static updateProfile = async (req, res, next) => {
         try {
             const { fullName, bio, school, college, relationshipStatus } = req.body;
@@ -133,9 +129,12 @@ class userController {
             if (req.file) {
                 const result = await new Promise((resolve, reject) => {
                     const stream = cloudinary.uploader.upload_stream(
-                        { resource_type: 'image', folder: 'shuvochat_profiles' },
+                        { resource_type: 'image', folder: 'shuvomedia_profiles' },
                         (error, result) => {
-                            if (error) reject(new CustomError(500, 'Failed to upload image to Cloudinary'));
+                            if (error) {
+                                console.error('Cloudinary upload error:', error);
+                                reject(new CustomError(500, 'Failed to upload image to Cloudinary'));
+                            }
                             resolve(result);
                         }
                     );
@@ -176,7 +175,6 @@ class userController {
         }
     }
 
-    // Get user profile
     static getProfile = async (req, res, next) => {
         try {
             const userId = req.params.id || req.user._id;
@@ -193,7 +191,6 @@ class userController {
         }
     }
 
-    // Get me
     static getMe = async (req, res, next) => {
         try {
             const user = await User.findById(req.user._id).select('-password');
@@ -208,7 +205,6 @@ class userController {
         }
     }
 
-    // Get recommended users
     static getRecommendedUsers = async (req, res, next) => {
         try {
             const users = await User.find({
@@ -237,7 +233,6 @@ class userController {
         }
     }
 
-    // Get my friends
     static getMyFriends = async (req, res, next) => {
         try {
             const user = await User.findById(req.user._id).populate('friends', '-password');
@@ -252,7 +247,6 @@ class userController {
         }
     }
 
-    // Send friend request
     static sendFriendRequest = async (req, res, next) => {
         try {
             const { id: recipientId } = req.params;
@@ -296,7 +290,6 @@ class userController {
         }
     }
 
-    // Cancel friend request
     static cancelFriendRequest = async (req, res, next) => {
         try {
             const { id: requestId } = req.params;
@@ -323,7 +316,6 @@ class userController {
         }
     }
 
-    // Accept friend request
     static acceptFriendRequest = async (req, res, next) => {
         try {
             const { id: requestId } = req.params;
@@ -353,7 +345,6 @@ class userController {
         }
     }
 
-    // Reject friend request
     static rejectFriendRequest = async (req, res, next) => {
         try {
             const { id: requestId } = req.params;
@@ -380,7 +371,6 @@ class userController {
         }
     }
 
-    // Get all friend requests
     static getFriendRequests = async (req, res, next) => {
         try {
             const friendRequests = await FriendRequest.find({ recipient: req.user._id, status: 'pending' })
@@ -398,7 +388,6 @@ class userController {
         }
     }
 
-    // Get outgoing friend requests
     static getOutgoingFriendRequests = async (req, res, next) => {
         try {
             const outgoingRequests = await FriendRequest.find({ sender: req.user._id, status: 'pending' })
