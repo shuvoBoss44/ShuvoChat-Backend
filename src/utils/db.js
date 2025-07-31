@@ -1,0 +1,6 @@
+const mongoose = require("mongoose");
+
+mongoose.connect(process.env.DB);
+
+const db = mongoose.connection;
+module.exports = db;
