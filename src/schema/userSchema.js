@@ -1,50 +1,63 @@
-const mongoose = require("mongoose");
-const bcrypt = require("bcryptjs");
-const CustomError = require("../error/CustomError");
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+const CustomError = require('../error/CustomError');
 
 const userSchema = new mongoose.Schema({
     fullName: {
         type: String,
         required: true,
-        trim: true
+        trim: true,
     },
     email: {
         type: String,
         required: true,
         unique: true,
         trim: true,
-        lowercase: true
+        lowercase: true,
     },
     password: {
         type: String,
         required: true,
         minlength: 6,
-        select: false
+        select: false,
     },
     profilePicture: {
         type: String,
-        default: 'https://www.shutterstock.com/image-vector/vector-flat-illustration-grayscale-avatar-600nw-2264922221.jpg'
+        default: 'https://www.shutterstock.com/image-vector/vector-flat-illustration-grayscale-avatar-600nw-2264922221.jpg',
     },
     bio: {
         type: String,
-        default: 'Hello, I am using ShuvoChat!'
+        default: 'Hello, I am using ShuvoChat!',
+    },
+    school: {
+        type: String,
+        trim: true,
+    },
+    college: {
+        type: String,
+        trim: true,
+    },
+    relationshipStatus: {
+        type: String,
+        enum: ['Single', 'In a relationship', 'Married', 'Complicated', ''],
+        default: '',
     },
     friends: [
         {
             type: mongoose.Schema.Types.ObjectId,
-            ref: 'User'
-        }
+            ref: 'User',
+        },
     ],
     role: {
         type: String,
         enum: ['user', 'admin'],
-        default: 'user'
+        default: 'user',
     },
 }, {
     timestamps: true,
 });
 
-// password hasing
+// Password hashing
 userSchema.pre('save', async function (next) {
     if (this.isModified('password')) {
         try {
