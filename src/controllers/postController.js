@@ -1,238 +1,147 @@
-const Post = require('../schema/postSchema');
-const Like = require('../schema/likeSchema');
-const Comment = require('../schema/commentSchema');
-const User = require('../schema/userSchema');
-const CustomError = require('../error/CustomError');
-const cloudinary = require('cloudinary').v2;
+const Post = require('../models/postSchema');
+const User = require('../models/userSchema');
+const { v2: cloudinary } = require('cloudinary');
+const { CustomError } = require('../utils/customError');
+const { z } = require('zod');
 
-cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET,
+const createPostSchema = z.object({
+    content: z.string().max(1000, 'Content must be 1000 characters or less').optional(),
 });
 
-class postController {
-    static async createPost(req, res, next) {
-        try {
-            const { content } = req.body;
-            let image;
+const createPost = async (req, res, next) => {
+    try {
+        const { content } = createPostSchema.parse(req.body);
+        const userId = req.user._id;
 
-            if (!content && !req.file) {
-                return next(new CustomError(400, 'Content or image is required'));
-            }
-
-            if (req.file) {
-                const result = await new Promise((resolve, reject) => {
-                    const stream = cloudinary.uploader.upload_stream(
-                        { resource_type: 'image', folder: 'shuvomedia_posts' },
-                        (error, result) => {
-                            if (error) {
-                                console.error('Cloudinary upload error:', error);
-                                reject(new CustomError(500, 'Failed to upload image to Cloudinary'));
-                            }
-                            resolve(result);
-                        }
-                    );
-                    stream.end(req.file.buffer);
-                });
-                image = result.secure_url;
-            }
-
-            const post = new Post({
-                user: req.user._id,
-                content,
-                image,
+        let image;
+        if (req.file) {
+            const result = await new Promise((resolve, reject) => {
+                const stream = cloudinary.uploader.upload_stream(
+                    { resource_type: 'image', folder: 'shuvomedia_posts' },
+                    (error, result) => {
+                        if (error) reject(new CustomError(500, 'Failed to upload image to Cloudinary'));
+                        resolve(result);
+                    }
+                );
+                stream.end(req.file.buffer);
             });
-
-            await post.save();
-
-            const populatedPost = await Post.findById(post._id)
-                .populate('user', 'fullName profilePicture')
-                .select('-__v');
-
-            res.status(201).json({ message: 'Post created successfully', post: populatedPost });
-        } catch (error) {
-            console.error('Error creating post:', error);
-            return next(new CustomError(500, 'Internal Server Error'));
+            image = result.secure_url;
         }
+
+        if (!content && !image) throw new CustomError(400, 'Content or image is required');
+
+        const post = new Post({ content, image, user: userId });
+        await post.save();
+
+        res.status(201).json({ success: true, post });
+    } catch (error) {
+        next(error instanceof z.ZodError ? new CustomError(400, error.errors[0].message) : error);
     }
+};
 
-    static async getFriendsPosts(req, res, next) {
-        try {
-            const user = await User.findById(req.user._id).select('friends');
-            if (!user) {
-                return next(new CustomError(404, 'User not found'));
-            }
+const getFriendsPosts = async (req, res, next) => {
+    try {
+        const userId = req.user._id;
+        const user = await User.findById(userId).select('friends');
+        if (!user) throw new CustomError(404, 'User not found');
 
-            const posts = await Post.find({ user: { $in: [...user.friends, req.user._id] } })
-                .populate('user', 'fullName profilePicture')
-                .populate({
-                    path: 'likes',
-                    populate: { path: 'user', select: 'fullName profilePicture' },
-                })
-                .sort({ createdAt: -1 })
-                .select('-__v');
+        const posts = await Post.find({
+            user: { $in: [...user.friends, userId] },
+        })
+            .populate('user', 'fullName profilePicture')
+            .populate({
+                path: 'likes',
+                populate: { path: 'user', select: 'fullName' },
+            })
+            .populate({
+                path: 'comments',
+                populate: { path: 'user', select: 'fullName profilePicture' },
+            })
+            .sort({ createdAt: -1 })
+            .limit(20);
 
-            res.status(200).json({ message: 'Posts retrieved successfully', posts });
-        } catch (error) {
-            console.error('Error fetching posts:', error);
-            return next(new CustomError(500, 'Internal Server Error'));
+        res.status(200).json({ success: true, posts });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const deletePost = async (req, res, next) => {
+    try {
+        const postId = req.params.id;
+        const userId = req.user._id;
+        const post = await Post.findById(postId);
+        if (!post) throw new CustomError(404, 'Post not found');
+        if (post.user.toString() !== userId.toString()) throw new CustomError(403, 'Unauthorized to delete this post');
+
+        if (post.image) {
+            const publicId = post.image.split('/').pop().split('.')[0];
+            await cloudinary.uploader.destroy(`shuvomedia_posts/${publicId}`);
         }
+
+        await Post.findByIdAndDelete(postId);
+        res.status(200).json({ success: true, message: 'Post deleted successfully' });
+    } catch (error) {
+        next(error);
     }
+};
 
-    static async getUserPosts(req, res, next) {
-        try {
-            const userId = req.params.userId;
-            const user = await User.findById(userId);
-            if (!user) {
-                return next(new CustomError(404, 'User not found'));
-            }
+const likePost = async (req, res, next) => {
+    try {
+        const postId = req.params.id;
+        const userId = req.user._id;
+        const post = await Post.findById(postId);
+        if (!post) throw new CustomError(404, 'Post not found');
 
-            const posts = await Post.find({ user: userId })
-                .populate('user', 'fullName profilePicture')
-                .populate({
-                    path: 'likes',
-                    populate: { path: 'user', select: 'fullName profilePicture' },
-                })
-                .sort({ createdAt: -1 })
-                .select('-__v');
+        const Like = require('../models/likeSchema');
+        const existingLike = await Like.findOne({ post: postId, user: userId });
+        if (existingLike) throw new CustomError(400, 'Post already liked');
 
-            res.status(200).json({ message: 'User posts retrieved successfully', posts });
-        } catch (error) {
-            console.error('Error fetching user posts:', error);
-            return next(new CustomError(500, 'Internal Server Error'));
-        }
+        const like = new Like({ post: postId, user: userId });
+        await like.save();
+
+        post.likes.push(like._id);
+        await post.save();
+
+        res.status(200).json({ success: true, message: 'Post liked successfully' });
+    } catch (error) {
+        next(error);
     }
+};
 
-    static async likePost(req, res, next) {
-        try {
-            const { postId } = req.params;
+const unlikePost = async (req, res, next) => {
+    try {
+        const postId = req.params.id;
+        const userId = req.user._id;
+        const Like = require('../models/likeSchema');
+        const like = await Like.findOneAndDelete({ post: postId, user: userId });
+        if (!like) throw new CustomError(400, 'Post not liked');
 
-            const post = await Post.findById(postId);
-            if (!post) {
-                return next(new CustomError(404, 'Post not found'));
-            }
+        await Post.findByIdAndUpdate(postId, { $pull: { likes: like._id } });
 
-            const existingLike = await Like.findOne({ user: req.user._id, post: postId });
-            if (existingLike) {
-                return next(new CustomError(400, 'Post already liked'));
-            }
-
-            const like = new Like({
-                user: req.user._id,
-                post: postId,
-            });
-
-            await like.save();
-
-            res.status(200).json({ message: 'Post liked successfully' });
-        } catch (error) {
-            console.error('Error liking post:', error);
-            return next(new CustomError(500, 'Internal Server Error'));
-        }
+        res.status(200).json({ success: true, message: 'Post unliked successfully' });
+    } catch (error) {
+        next(error);
     }
+};
 
-    static async unlikePost(req, res, next) {
-        try {
-            const { postId } = req.params;
+const commentOnPost = async (req, res, next) => {
+    try {
+        const postId = req.params.id;
+        const userId = req.user._id;
+        const { content } = req.body;
+        if (!content) throw new CustomError(400, 'Comment content is required');
 
-            const like = await Like.findOneAndDelete({ user: req.user._id, post: postId });
-            if (!like) {
-                return next(new CustomError(400, 'Post not liked'));
-            }
+        const Comment = require('../models/commentSchema');
+        const comment = new Comment({ content, post: postId, user: userId });
+        await comment.save();
 
-            res.status(200).json({ message: 'Post unliked successfully' });
-        } catch (error) {
-            console.error('Error unliking post:', error);
-            return next(new CustomError(500, 'Internal Server Error'));
-        }
+        await Post.findByIdAndUpdate(postId, { $push: { comments: comment._id } });
+
+        res.status(201).json({ success: true, comment });
+    } catch (error) {
+        next(error);
     }
+};
 
-    static async commentOnPost(req, res, next) {
-        try {
-            const { postId } = req.params;
-            const { content } = req.body;
-
-            if (!content) {
-                return next(new CustomError(400, 'Comment content is required'));
-            }
-
-            const post = await Post.findById(postId);
-            if (!post) {
-                return next(new CustomError(404, 'Post not found'));
-            }
-
-            const comment = new Comment({
-                user: req.user._id,
-                post: postId,
-                content,
-            });
-
-            await comment.save();
-
-            const populatedComment = await Comment.findById(comment._id)
-                .populate('user', 'fullName profilePicture')
-                .select('-__v');
-
-            res.status(201).json({ message: 'Comment added successfully', comment: populatedComment });
-        } catch (error) {
-            console.error('Error commenting on post:', error);
-            return next(new CustomError(500, 'Internal Server Error'));
-        }
-    }
-
-    static async getPostComments(req, res, next) {
-        try {
-            const { postId } = req.params;
-
-            const post = await Post.findById(postId);
-            if (!post) {
-                return next(new CustomError(404, 'Post not found'));
-            }
-
-            const comments = await Comment.find({ post: postId })
-                .populate('user', 'fullName profilePicture')
-                .sort({ createdAt: -1 })
-                .select('-__v');
-
-            res.status(200).json({ message: 'Comments retrieved successfully', comments });
-        } catch (error) {
-            console.error('Error fetching comments:', error);
-            return next(new CustomError(500, 'Internal Server Error'));
-        }
-    }
-
-    static async deletePost(req, res, next) {
-        try {
-            const { postId } = req.params;
-
-            const post = await Post.findById(postId);
-            if (!post) {
-                return next(new CustomError(404, 'Post not found'));
-            }
-
-            if (post.user.toString() !== req.user._id.toString()) {
-                return next(new CustomError(403, 'You are not authorized to delete this post'));
-            }
-
-            // Delete associated likes and comments
-            await Like.deleteMany({ post: postId });
-            await Comment.deleteMany({ post: postId });
-
-            // Delete image from Cloudinary if it exists
-            if (post.image) {
-                const publicId = post.image.split('/').pop().split('.')[0];
-                await cloudinary.uploader.destroy(`shuvomedia_posts/${publicId}`);
-            }
-
-            await Post.findByIdAndDelete(postId);
-
-            res.status(200).json({ message: 'Post deleted successfully' });
-        } catch (error) {
-            console.error('Error deleting post:', error);
-            return next(new CustomError(500, 'Internal Server Error'));
-        }
-    }
-}
-
-module.exports = postController;
+module.exports = { createPost, getFriendsPosts, deletePost, likePost, unlikePost, commentOnPost };
