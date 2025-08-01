@@ -27,7 +27,7 @@ const userSchema = new mongoose.Schema({
     },
     bio: {
         type: String,
-        default: 'Hello, I am using ShuvoChat!',
+        default: 'Hello, I am using ShuvoMedia!',
     },
     school: {
         type: String,

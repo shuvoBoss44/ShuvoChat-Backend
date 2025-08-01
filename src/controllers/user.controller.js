@@ -124,11 +124,17 @@ class userController {
 
     static logout = async (req, res, next) => {
         try {
-            res.clearCookie('token');
+            // Clear the 'token' cookie with matching attributes
+            res.clearCookie('token', {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'none',
+            });
+            console.log('User logged out successfully, cookie cleared');
             res.status(200).json({ message: 'User logged out successfully' });
         } catch (error) {
-            console.log(error);
-            return next(new CustomError(500, 'Internal Server Error'));
+            console.error('Logout error:', error.message, error.stack);
+            return next(new CustomError(500, 'Failed to log out: ' + error.message));
         }
     }
 
