@@ -135,42 +135,50 @@ class userController {
     static updateProfile = async (req, res, next) => {
         try {
             const { fullName, bio, school, college, relationshipStatus } = req.body;
-            let profilePicture;
+            let profilePicture = req.body.profilePicture;
 
-            // Handle image upload via Cloudinary
+            console.log("Update Profile Request:", {
+                body: req.body,
+                file: req.file ? `${req.file.originalname} (${req.file.mimetype})` : "No file",
+            });
+
             if (req.file) {
-                console.log('Uploading to Cloudinary:', { filename: req.file.originalname, size: req.file.size });
-                const result = await new Promise((resolve, reject) => {
-                    const stream = cloudinary.uploader.upload_stream(
-                        { resource_type: 'image', folder: 'shuvomedia_profiles' },
-                        (error, result) => {
-                            if (error) {
-                                console.error('Cloudinary upload error:', error);
-                                reject(new CustomError(500, `Failed to upload image to Cloudinary: ${error.message || 'Unknown error'}`));
+                try {
+                    const result = await new Promise((resolve, reject) => {
+                        const stream = cloudinary.uploader.upload_stream(
+                            { resource_type: 'image', folder: 'shuvomedia_profiles' },
+                            (error, result) => {
+                                if (error) {
+                                    console.error('Cloudinary upload error:', error);
+                                    reject(new CustomError(500, 'Failed to upload image to Cloudinary'));
+                                }
+                                resolve(result);
                             }
-                            console.log('Cloudinary upload success:', { secure_url: result.secure_url });
-                            resolve(result);
-                        }
-                    );
-                    stream.end(req.file.buffer);
-                });
-                profilePicture = result.secure_url;
+                        );
+                        stream.end(req.file.buffer);
+                    });
+                    profilePicture = result.secure_url;
+                    console.log("Cloudinary Upload Success:", profilePicture);
+                } catch (error) {
+                    console.error("Cloudinary Upload Failed:", error);
+                    return next(new CustomError(500, 'Failed to upload image'));
+                }
             }
 
-            // Build update data object
             const updateData = {};
-            if (fullName !== undefined && fullName !== '') updateData.fullName = fullName;
+            if (fullName !== undefined) updateData.fullName = fullName;
             if (bio !== undefined) updateData.bio = bio;
             if (school !== undefined) updateData.school = school;
             if (college !== undefined) updateData.college = college;
             if (relationshipStatus !== undefined) updateData.relationshipStatus = relationshipStatus;
-            if (profilePicture) updateData.profilePicture = profilePicture;
-
-            if (Object.keys(updateData).length === 0) {
-                return next(new CustomError(400, 'At least one valid field must be provided to update'));
+            if (profilePicture !== undefined && !profilePicture.startsWith('blob:')) {
+                updateData.profilePicture = profilePicture;
             }
 
-            // Update user in MongoDB
+            if (Object.keys(updateData).length === 0) {
+                return next(new CustomError(400, 'At least one field must be provided to update'));
+            }
+
             const updatedUser = await User.findByIdAndUpdate(req.user._id, updateData, {
                 new: true,
             }).select('-password');
@@ -179,7 +187,6 @@ class userController {
                 return next(new CustomError(404, 'User not found'));
             }
 
-            // Update user data in Stream
             const streamUser = await upsertStreamData(updatedUser);
             if (!streamUser) {
                 return next(new CustomError(500, 'Error upserting user data to Stream'));
