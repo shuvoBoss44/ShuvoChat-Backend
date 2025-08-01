@@ -125,7 +125,7 @@ class userController {
         try {
             const { fullName, bio, school, college, relationshipStatus } = req.body;
             let profilePicture = req.body.profilePicture;
-
+            console.log('Received profile picture:', profilePicture);
             if (req.file) {
                 const result = await new Promise((resolve, reject) => {
                     const stream = cloudinary.uploader.upload_stream(
