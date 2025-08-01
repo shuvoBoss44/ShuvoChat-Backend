@@ -37,5 +37,6 @@ router.delete('/reject-friend-request/:id', authentication, userController.rejec
 router.get('/friend-requests', authentication, userController.getFriendRequests);
 router.get('/getOutgoingFriendRequests', authentication, userController.getOutgoingFriendRequests);
 router.get('/posts/:userId', authentication, postController.getUserPosts);
+router.post("/logout", authentication, userController.logout);
 
 module.exports = router;
