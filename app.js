@@ -41,7 +41,7 @@ db.once('open', function () {
     console.log('Connected to the database');
 });
 
-app.use('/api/user', upload.single('profilePicture'), userRoutes);
+app.use('/api/user', userRoutes);
 app.use('/api/chats', chatRoutes);
 app.use('/api/posts', postRoutes);
 
