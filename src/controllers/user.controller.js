@@ -13,6 +13,17 @@ cloudinary.config({
     api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+// Validate Cloudinary configuration
+if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+    console.error('Cloudinary configuration error: Missing environment variables');
+    throw new Error('Cloudinary configuration is incomplete. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET.');
+}
+console.log('Cloudinary config:', {
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY ? 'Set' : 'Not set',
+    api_secret: process.env.CLOUDINARY_API_SECRET ? 'Set' : 'Not set',
+});
+
 class userController {
     static register = async (req, res, next) => {
         try {
@@ -128,14 +139,16 @@ class userController {
 
             // Handle image upload via Cloudinary
             if (req.file) {
+                console.log('Uploading to Cloudinary:', { filename: req.file.originalname, size: req.file.size });
                 const result = await new Promise((resolve, reject) => {
                     const stream = cloudinary.uploader.upload_stream(
                         { resource_type: 'image', folder: 'shuvomedia_profiles' },
                         (error, result) => {
                             if (error) {
                                 console.error('Cloudinary upload error:', error);
-                                reject(new CustomError(500, 'Failed to upload image to Cloudinary'));
+                                reject(new CustomError(500, `Failed to upload image to Cloudinary: ${error.message || 'Unknown error'}`));
                             }
+                            console.log('Cloudinary upload success:', { secure_url: result.secure_url });
                             resolve(result);
                         }
                     );
