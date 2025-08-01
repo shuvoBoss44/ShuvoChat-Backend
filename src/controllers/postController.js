@@ -48,8 +48,13 @@ class postController {
 
             const populatedPost = await Post.findById(post._id)
                 .populate('user', 'fullName profilePicture')
+                .populate({
+                    path: 'likes',
+                    populate: { path: 'user', select: 'fullName profilePicture' },
+                })
                 .select('-__v');
 
+            console.log('Post created:', populatedPost); // Debug: Log created post
             res.status(201).json({ message: 'Post created successfully', post: populatedPost });
         } catch (error) {
             console.error('Error creating post:', error);
@@ -73,6 +78,7 @@ class postController {
                 .sort({ createdAt: -1 })
                 .select('-__v');
 
+            console.log('Friends posts fetched:', posts.length); // Debug: Log number of posts
             res.status(200).json({ message: 'Posts retrieved successfully', posts });
         } catch (error) {
             console.error('Error fetching posts:', error);
@@ -97,6 +103,7 @@ class postController {
                 .sort({ createdAt: -1 })
                 .select('-__v');
 
+            console.log(`User posts fetched for user ${userId}:`, posts.length); // Debug: Log number of posts
             res.status(200).json({ message: 'User posts retrieved successfully', posts });
         } catch (error) {
             console.error('Error fetching user posts:', error);
@@ -125,7 +132,17 @@ class postController {
 
             await like.save();
 
-            res.status(200).json({ message: 'Post liked successfully' });
+            // Fetch the updated post with populated likes
+            const updatedPost = await Post.findById(postId)
+                .populate('user', 'fullName profilePicture')
+                .populate({
+                    path: 'likes',
+                    populate: { path: 'user', select: 'fullName profilePicture' },
+                })
+                .select('-__v');
+
+            console.log('Post liked:', { postId, userId: req.user._id }); // Debug: Log like action
+            res.status(200).json({ message: 'Post liked successfully', post: updatedPost });
         } catch (error) {
             console.error('Error liking post:', error);
             return next(new CustomError(500, 'Internal Server Error'));
@@ -141,7 +158,17 @@ class postController {
                 return next(new CustomError(400, 'Post not liked'));
             }
 
-            res.status(200).json({ message: 'Post unliked successfully' });
+            // Fetch the updated post with populated likes
+            const updatedPost = await Post.findById(postId)
+                .populate('user', 'fullName profilePicture')
+                .populate({
+                    path: 'likes',
+                    populate: { path: 'user', select: 'fullName profilePicture' },
+                })
+                .select('-__v');
+
+            console.log('Post unliked:', { postId, userId: req.user._id }); // Debug: Log unlike action
+            res.status(200).json({ message: 'Post unliked successfully', post: updatedPost });
         } catch (error) {
             console.error('Error unliking post:', error);
             return next(new CustomError(500, 'Internal Server Error'));
@@ -170,11 +197,19 @@ class postController {
 
             await comment.save();
 
+            // Fetch the updated comments count
+            const commentsCount = await Comment.countDocuments({ post: postId });
+
             const populatedComment = await Comment.findById(comment._id)
                 .populate('user', 'fullName profilePicture')
                 .select('-__v');
 
-            res.status(201).json({ message: 'Comment added successfully', comment: populatedComment });
+            console.log('Comment added:', { postId, commentId: comment._id }); // Debug: Log comment action
+            res.status(201).json({
+                message: 'Comment added successfully',
+                comment: populatedComment,
+                commentsCount,
+            });
         } catch (error) {
             console.error('Error commenting on post:', error);
             return next(new CustomError(500, 'Internal Server Error'));
@@ -195,6 +230,7 @@ class postController {
                 .sort({ createdAt: -1 })
                 .select('-__v');
 
+            console.log('Comments fetched:', { postId, count: comments.length }); // Debug: Log comments count
             res.status(200).json({ message: 'Comments retrieved successfully', comments });
         } catch (error) {
             console.error('Error fetching comments:', error);
@@ -227,6 +263,7 @@ class postController {
 
             await Post.findByIdAndDelete(postId);
 
+            console.log('Post deleted:', { postId }); // Debug: Log delete action
             res.status(200).json({ message: 'Post deleted successfully' });
         } catch (error) {
             console.error('Error deleting post:', error);
