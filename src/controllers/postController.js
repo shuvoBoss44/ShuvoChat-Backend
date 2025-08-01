@@ -131,8 +131,9 @@ class postController {
             });
 
             await like.save();
+            post.likes.push(like._id);
+            await post.save();
 
-            // Fetch the updated post with populated likes
             const updatedPost = await Post.findById(postId)
                 .populate('user', 'fullName profilePicture')
                 .populate({
@@ -141,8 +142,12 @@ class postController {
                 })
                 .select('-__v');
 
-            console.log('Post liked:', { postId, userId: req.user._id }); // Debug: Log like action
-            res.status(200).json({ message: 'Post liked successfully', post: updatedPost });
+            console.log('Post liked:', { postId, userId: req.user._id });
+            res.status(200).json({
+                message: 'Post liked successfully',
+                post: updatedPost,
+                likesCount: updatedPost.likes.length,
+            });
         } catch (error) {
             console.error('Error liking post:', error);
             return next(new CustomError(500, 'Internal Server Error'));
@@ -158,7 +163,8 @@ class postController {
                 return next(new CustomError(400, 'Post not liked'));
             }
 
-            // Fetch the updated post with populated likes
+            await Post.findByIdAndUpdate(postId, { $pull: { likes: like._id } });
+
             const updatedPost = await Post.findById(postId)
                 .populate('user', 'fullName profilePicture')
                 .populate({
@@ -167,8 +173,12 @@ class postController {
                 })
                 .select('-__v');
 
-            console.log('Post unliked:', { postId, userId: req.user._id }); // Debug: Log unlike action
-            res.status(200).json({ message: 'Post unliked successfully', post: updatedPost });
+            console.log('Post unliked:', { postId, userId: req.user._id });
+            res.status(200).json({
+                message: 'Post unliked successfully',
+                post: updatedPost,
+                likesCount: updatedPost.likes.length,
+            });
         } catch (error) {
             console.error('Error unliking post:', error);
             return next(new CustomError(500, 'Internal Server Error'));
@@ -196,19 +206,27 @@ class postController {
             });
 
             await comment.save();
-
-            // Fetch the updated comments count
-            const commentsCount = await Comment.countDocuments({ post: postId });
+            post.comments.push(comment._id);
+            await post.save();
 
             const populatedComment = await Comment.findById(comment._id)
                 .populate('user', 'fullName profilePicture')
                 .select('-__v');
 
-            console.log('Comment added:', { postId, commentId: comment._id }); // Debug: Log comment action
+            const updatedPost = await Post.findById(postId)
+                .populate('user', 'fullName profilePicture')
+                .populate({
+                    path: 'likes',
+                    populate: { path: 'user', select: 'fullName profilePicture' },
+                })
+                .select('-__v');
+
+            console.log('Comment added:', { postId, commentId: comment._id });
             res.status(201).json({
                 message: 'Comment added successfully',
                 comment: populatedComment,
-                commentsCount,
+                post: updatedPost,
+                commentsCount: updatedPost.comments.length,
             });
         } catch (error) {
             console.error('Error commenting on post:', error);
