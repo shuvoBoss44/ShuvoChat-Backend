@@ -124,8 +124,9 @@ class userController {
     static updateProfile = async (req, res, next) => {
         try {
             const { fullName, bio, school, college, relationshipStatus } = req.body;
-            let profilePicture = req.body.profilePicture;
-            console.log('Received profile picture:', profilePicture);
+            let profilePicture;
+
+            // Handle image upload via Cloudinary
             if (req.file) {
                 const result = await new Promise((resolve, reject) => {
                     const stream = cloudinary.uploader.upload_stream(
@@ -143,18 +144,20 @@ class userController {
                 profilePicture = result.secure_url;
             }
 
+            // Build update data object
             const updateData = {};
-            if (fullName !== undefined) updateData.fullName = fullName;
+            if (fullName !== undefined && fullName !== '') updateData.fullName = fullName;
             if (bio !== undefined) updateData.bio = bio;
             if (school !== undefined) updateData.school = school;
             if (college !== undefined) updateData.college = college;
             if (relationshipStatus !== undefined) updateData.relationshipStatus = relationshipStatus;
-            if (profilePicture !== undefined) updateData.profilePicture = profilePicture;
+            if (profilePicture) updateData.profilePicture = profilePicture;
 
             if (Object.keys(updateData).length === 0) {
-                return next(new CustomError(400, 'At least one field must be provided to update'));
+                return next(new CustomError(400, 'At least one valid field must be provided to update'));
             }
 
+            // Update user in MongoDB
             const updatedUser = await User.findByIdAndUpdate(req.user._id, updateData, {
                 new: true,
             }).select('-password');
@@ -163,6 +166,7 @@ class userController {
                 return next(new CustomError(404, 'User not found'));
             }
 
+            // Update user data in Stream
             const streamUser = await upsertStreamData(updatedUser);
             if (!streamUser) {
                 return next(new CustomError(500, 'Error upserting user data to Stream'));
